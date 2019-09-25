@@ -2,7 +2,7 @@
 	"name": "cppref",
 	"displayName": "Cppref",
 	"description": "Cpp refactoring tool",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"engines": {
 		"vscode": "^1.33.0"
 	},
@@ -10,6 +10,7 @@
 		"Other"
 	],
 	"activationEvents": [
+		"onCommand:extension.createFilePair",
 		"onCommand:extension.implementInterface"
 	],
 	"main": "./out/extension.js",
@@ -18,6 +19,10 @@
 			{
 				"command": "extension.implementInterface",
 				"title": "Cppref: implement interface"
+			},
+			{
+				"command": "extension.createFilePair",
+				"title": "Cppref: create file pair"
 			}
 		],
 		"menus": {
