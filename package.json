@@ -1,17 +1,24 @@
 {
+	"author": {
+		"name": "Anton Baryshnikau"
+	},
+	"license": "SEE LICENSE IN LICENSE.txt",
 	"name": "cppref",
+	"publisher": "cppref",
 	"displayName": "Cppref",
+	"repository": {"url":"https://github.com/barynton/cppref.git", "type": "git"},
 	"description": "Cpp refactoring tool",
-	"version": "0.0.2",
+	"version": "0.1.0",
 	"engines": {
-		"vscode": "^1.33.0"
+		"vscode": "^1.37.0"
 	},
 	"categories": [
 		"Other"
 	],
 	"activationEvents": [
 		"onCommand:extension.createFilePair",
-		"onCommand:extension.implementInterface"
+		"onCommand:extension.implementInterface",
+		"onCommand:extension.changeDeclaration"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
@@ -23,6 +30,10 @@
 			{
 				"command": "extension.createFilePair",
 				"title": "Cppref: create file pair"
+			},
+			{
+				"command": "extension.changeDeclaration",
+				"title": "Cppref: chnage declaration"
 			}
 		],
 		"menus": {
@@ -30,8 +41,27 @@
 				{
 					"command": "extension.implementInterface",
 					"when": "resourceLangId == cpp"
+				},
+				{
+					"command": "extension.changeDeclaration",
+					"when": "resourceLangId == cpp"
 				}
 			]
+		},
+		"configuration":{
+			"title": "Cppref",
+			"properties": {
+			"cppref.definition_with_namespace":	{
+					"type": "boolean",
+					"default": true,
+					"description": "If set, definition header containes namespace. Otherwise outer namespace is used."			
+				},
+				"cppref.use_nested_namespaces":	{
+					"type": "boolean",
+					"default": true,
+					"description": "If set, namespaceA::namespaceB {} is used. Otherwise namespaceA { namespaceB {}} is used."
+				}
+			}
 		}
 	},
 	"scripts": {
@@ -42,13 +72,15 @@
 		"test": "npm run compile && node ./node_modules/vscode/bin/test"
 	},
 	"devDependencies": {
-		"typescript": "^3.3.1",
-		"vscode": "^1.1.28",
-		"tslint": "^5.12.1",
 		"@types/node": "^10.12.21",
-		"@types/mocha": "^2.2.42"
+		"@types/vscode": "^1.37.0",
+		"typescript": "^3.5.1",
+		"tslint": "^5.12.1"	
 	},
 	"extensionDependencies": [
 		"ms-vscode.cpptools"
-	]
+	],
+	"dependencies": {
+		"vsce": "^1.67.1"
+	}
 }

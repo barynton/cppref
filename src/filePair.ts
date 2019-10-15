@@ -16,7 +16,7 @@ async function openFile(uri: vscode.Uri, intialText: string) {
 }
 
 export async function createFilePair() {
-    let fileName = await vscode.window.showInputBox();
+    let fileName = await vscode.window.showInputBox({prompt: "enter base file name"});
     if (fileName !== undefined) {
 
         if (vscode.workspace.workspaceFolders === undefined) {
