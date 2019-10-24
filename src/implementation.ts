@@ -92,11 +92,8 @@ function searchInsertPosition(document: vscode.TextDocument, namespace: string):
 			return;
 		}
 
-		let location =  cpprefHelpers.getLocationBehind(document, namespaceInfos[0].location.range.end, "{");
-
-		if (location) {
-			result = location.range.end;
-		}
+		let end = namespaceInfos[0].range.end;
+		result = new vscode.Position(end.line, end.character -1);
 
 		resolve(result);
 	});

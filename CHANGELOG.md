@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.1.1
++Fixes for cpp-tools 0.26.0
++Switched to vs-code 1.39.0 API
++Improved packaging
+
 ## 0.1.0
 +Added namespace configuration for virtual methods implementation. By default nested namespace in function header is used.
 +Implemented change declaration command.

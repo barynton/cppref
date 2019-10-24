@@ -10,6 +10,25 @@ export enum MethodDescriptor
     override = "override"
 }
 
+class SymbolInfo
+{
+	namespace: string[] = [];
+	documentSymbol: vscode.DocumentSymbol | undefined;
+
+	getNamespaceString(): string {
+		let result = "";
+
+		if (this.namespace.length > 0) {
+			result = this.namespace[0];
+
+			for (let i = 1; i < this.namespace.length; ++i) {
+				result += "::" + this.namespace[i];
+			}
+		}
+
+		return result;
+	}
+}
 export class FunctionInfo
 {
 	name: string | undefined;
@@ -86,8 +105,8 @@ export function getFirstDefinitionLocation(location : vscode.Location) : Thenabl
 	});
 }
 
-export function getSymbolInformation(uri: vscode.Uri): Thenable<vscode.SymbolInformation[] | undefined> {
-	return vscode.commands.executeCommand<vscode.SymbolInformation[]>('vscode.executeDocumentSymbolProvider', uri);
+export function getSymbolInformation(uri: vscode.Uri): Thenable<vscode.DocumentSymbol[] | undefined> {
+	return vscode.commands.executeCommand<vscode.DocumentSymbol[]>('vscode.executeDocumentSymbolProvider', uri);
 }
 
 function getTextBehind(document: vscode.TextDocument, position: vscode.Position, value: string | RegExp): string | undefined {
@@ -111,8 +130,6 @@ function getClassSrtrings(document: vscode.TextDocument, range: vscode.Range) : 
 
 	let text = document.getText(range);
 	let number = text.search("{");
-
-	let classInfos : ClassInfo[] = [];
 
 	if (number > -1 ) {
 		text = text.substr(0, number + 1).replace(/[\r\n]+/g, " ");
@@ -185,18 +202,21 @@ function getParrents(document: vscode.TextDocument, location: vscode.Location): 
 	});
 }
 
-// I hope cpptools will implement AST with function return parameters info. Currently cpptools provides only function name location.
-// Thus the workaround is to search using regexps.
-function getFunctionText(document: vscode.TextDocument, symbolInfo: vscode.SymbolInformation): string {
-	let text = "";
-	
-	let startPosition = cpprefHelpers.getPositionAhead(document, symbolInfo.location.range.start, /(?!::)([;:{}"])(?<!::)/g);
 
-	if (startPosition !== undefined) {
-		text = document.getText(new vscode.Range(startPosition, symbolInfo.location.range.end));
-		text += getTextBehind(document, symbolInfo.location.range.end, /(\s*)(\([0-9A-Za-z&=()*.:,\s]*[^;{])/g);
-		text = text.substr(1);
+function getFunctionHeader(document: vscode.TextDocument, symbolInfo: vscode.DocumentSymbol): string {
+	let text = "";
+	let start = symbolInfo.range.start;
+	
+	// insert indent
+
+	let startLineText = document.lineAt(start.line).text;
+	let indentMatches = startLineText.match(/[^\S\n]*/);
+	if (indentMatches) {
+		text += indentMatches[0];
 	}
+
+	text += document.getText(new vscode.Range(start, symbolInfo.selectionRange.end));
+	text += getTextBehind(document, symbolInfo.selectionRange.end, /(\s*)(\([0-9A-Za-z&=()*.:,\s]*[^;{])/g);
 	
 	return text;
 }
@@ -215,43 +235,78 @@ export function tideFunctionText(text: string): string {
 	const removeValues = [/virtual\s*/, /static\s*/, /override\s*/, /\s*=\s*0\s*/g];
 	text = cpprefHelpers.removeStrings(text, removeValues);
 
-	// Keeps original indent, removes empty lines
-	let firstNonSpaceChar = text.search(/[^\s]/);
-	if (firstNonSpaceChar > 0) {
-		let lastNewLine = text.lastIndexOf("\n", firstNonSpaceChar-1);
-
-		if (lastNewLine > -1) {
-			text = text.substr(lastNewLine+1);
-		}
-	}
-
 	return text;
 }
 
-export function getFunctionInfo(document: vscode.TextDocument, info: vscode.SymbolInformation): FunctionInfo {
+export function getFunctionInfo(document: vscode.TextDocument, info: vscode.DocumentSymbol, namespace: string): FunctionInfo {
 	let functionInfo = new FunctionInfo;
-	functionInfo.name = document.getText(info.location.range);
-	let text = getFunctionText(document, info);
+	functionInfo.name = document.getText(info.selectionRange);
+	let text = getFunctionHeader(document, info);
 	functionInfo.methodDescription = getFunctionDescription(text);
 	functionInfo.text = tideFunctionText(text);
-	functionInfo.namespace = info.containerName;
+	functionInfo.namespace = namespace;
 
 	return functionInfo;
 }
 
-function getMethodsInfo(document: vscode.TextDocument, namespace: string, infos: vscode.SymbolInformation[]): FunctionInfo[] {
+function getMethodsInfo(document: vscode.TextDocument, namespace: string, infos: vscode.DocumentSymbol[]): FunctionInfo[] {
 	let methodInfos : FunctionInfo[];
 
-	let methodSymbolInfos = infos.filter(info => info.containerName === namespace && info.kind === vscode.SymbolKind.Method);
+	let methodSymbolInfos = infos.filter(info => info.kind === vscode.SymbolKind.Method);
 
 	methodInfos = [];
 
 	for (let methodSymbolInfo of methodSymbolInfos) {
-		let methodInfo = getFunctionInfo(document, methodSymbolInfo);
+		let methodInfo = getFunctionInfo(document, methodSymbolInfo, namespace);
 		methodInfos.push(methodInfo);
 	}
 
 	return methodInfos;
+}
+
+function findDocumentSymbols(infos: vscode.DocumentSymbol[], range: vscode.Range): vscode.DocumentSymbol[] | undefined {
+	let result = undefined;
+	
+	let info = infos.find(info => info.selectionRange.isEqual(range));
+	
+	if (!info) {
+		for (let i of infos) {
+			if (i.children.length) {
+				let childrenResult = findDocumentSymbols(i.children, range);
+
+				if (childrenResult) {
+					result = [i];
+					childrenResult.forEach(cr => result.push(cr));
+					break;
+				}
+			}
+		}
+	} else {
+		result = [info];
+	}
+
+	return result;
+}
+
+export function getSymbolInfo(infos: vscode.DocumentSymbol[], range: vscode.Range): SymbolInfo | undefined {
+	let symbols = findDocumentSymbols(infos, range);
+
+	if (!symbols) {
+		return undefined;
+	}
+
+	let namespace = [];
+
+
+	for (let i = 0; i < symbols.length-1; ++i) {
+		namespace.push(symbols[i].name);
+	}
+
+	let result = new SymbolInfo;
+	result.namespace = namespace;
+	result.documentSymbol = symbols[symbols.length-1];
+
+	return result;
 }
 
 export function getClassInfo(location: vscode.Location): Thenable<ClassInfo> {
@@ -261,20 +316,24 @@ export function getClassInfo(location: vscode.Location): Thenable<ClassInfo> {
 		await vscode.workspace.openTextDocument(location.uri).then(async document => {
 			let className = document.getText(location.range);
 
-			await vscode.commands.executeCommand<vscode.SymbolInformation[]>('vscode.executeDocumentSymbolProvider', location.uri).then(async infos => {
+			await getSymbolInformation(location.uri).then(async infos => {
 				if (infos === undefined) {
 					return;
-				}
+				}				
 				
-				let info = infos.find(info => info.name === className && info.kind === vscode.SymbolKind.Class);
+				let info = getSymbolInfo(infos, location.range);
 
 				if (!info) {
 					return;
 				}
-				
+
 				classInfo.name = className;
-				classInfo.namespace = info.containerName;
-				classInfo.methodInfos = getMethodsInfo(document, classInfo.getFullName(), infos);
+				classInfo.namespace = info.getNamespaceString();
+				
+				if (info.documentSymbol && info.documentSymbol.children) {
+					classInfo.methodInfos = getMethodsInfo(document, classInfo.getFullName(), info.documentSymbol.children);
+				}
+				
 				classInfo.parentIfos = await getParrents(document, location);
 				classInfo.location = location;
 				classInfo.declarationStart = cpprefHelpers.getLocationBehind(document, location.range.start, "{");
@@ -286,23 +345,37 @@ export function getClassInfo(location: vscode.Location): Thenable<ClassInfo> {
 	});
 }
 
-export function searchNamespace(name: string, symbolInfo: vscode.SymbolInformation[], document: vscode.TextDocument): vscode.SymbolInformation[]
+export function searchNamespace(name: string, symbolInfo: vscode.DocumentSymbol[], document: vscode.TextDocument): vscode.DocumentSymbol[] | undefined
 {
 	let pureNames = name.split("::");
 
-	let namespaceInfos = symbolInfo.filter(info => info.kind === vscode.SymbolKind.Namespace);
+	let namespaceInfos = symbolInfo;
 
-	for(let i = 1; i < pureNames.length; ++i) {
-		namespaceInfos = namespaceInfos.filter(info => info.containerName === pureNames[i-1] && info.name === pureNames[i]);
+	for(let i = 0; i < pureNames.length; ++i) {
+		namespaceInfos = namespaceInfos.filter(info => info.name === pureNames[i] && info.kind === vscode.SymbolKind.Namespace);
+		
+		if (!namespaceInfos || i === pureNames.length-1) {
+			break;
+		}
+		
+		let childrenInfos: vscode.DocumentSymbol[] = [];
+		namespaceInfos.forEach(ni => ni.children.forEach(ci => childrenInfos.push(ci)));
+		
+		namespaceInfos = childrenInfos;		
 	}
 
 	namespaceInfos = namespaceInfos.filter(info => { 
-		let end = info.location.range.end;
+		let end = info.range.end;
 		let line = document.lineAt(end);
 		let exclude = line.text.length > end.character && line.text[end.character+1] === ':'; 
 
 		return !exclude;
 	});
 
-	return namespaceInfos;
+	if (namespaceInfos.length) {
+		return namespaceInfos;
+	}
+	else {
+		return undefined;
+	}
 }

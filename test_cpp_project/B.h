@@ -12,8 +12,17 @@ class B :
     public C
  
 {
-virtual void lala(int i) override;
-};
+    void oluckyman() override;
+        void 
+    lala() const override;
+    void tata(
+        int i, 
+        int b) override;
+    int tutu() override;
+
+
+
+} ;
 
 }
 
