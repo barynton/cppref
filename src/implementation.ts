@@ -78,7 +78,7 @@ function searchInsertPosition(document: vscode.TextDocument, namespace: string):
 			return;
 		}
 
-		let symbolInfos = await cpprefInfo.getSymbolInformation(document.uri);
+		let symbolInfos = await cpprefInfo.getDocumentSymbolInformation(document.uri);
 
 		if (!symbolInfos) {
 			resolve(result);
@@ -99,22 +99,49 @@ function searchInsertPosition(document: vscode.TextDocument, namespace: string):
 	});
 }
 
-function getMethodsText(methodInfos: Array<cpprefInfo.FunctionInfo>, classInfo: cpprefInfo.ClassInfo, definitionWithNamespace: boolean): string {
+function getFunctionImplementationHead(info: cpprefInfo.FunctionInfo, definitionWithNamespace: boolean): string {
+	if (!info.name) {
+		return "";
+	}
+
+	let implementationHead = info.text;
+	
+	if (info.namespace.length) {
+		let name = "";
+
+		if (definitionWithNamespace) {
+			name = info.getFullName();
+		}
+		else {
+			if (info.className.length) {
+				name = info.className + "::";
+			}
+
+			name = name + info.name;
+		}
+
+		implementationHead = implementationHead.replace(info.name, name);
+	}
+
+	implementationHead = cpprefHelpers.removeIndent(implementationHead);
+
+	return implementationHead;
+}
+
+function getFunctionMockImplementation(info: cpprefInfo.FunctionInfo, definitionWithNamespace: boolean): string {
+	return "\n" + getFunctionImplementationHead(info, definitionWithNamespace) + " {\n}\n";	
+}
+
+function getFunctionImplementation(info: cpprefInfo.FunctionInfo, definitionWithNamespace: boolean): string {
+	return "\n" + getFunctionImplementationHead(info, definitionWithNamespace) + " " + info.implementation + "\n";	
+}
+
+function getMethodsText(methodInfos: Array<cpprefInfo.FunctionInfo>, definitionWithNamespace: boolean): string {
 	let result = "";
 	
 	methodInfos.forEach(info => {
 		if (info.text !== undefined && info.name !== undefined) {
-			let methodText = info.text;
-
-			if (definitionWithNamespace) {
-				methodText = methodText.replace(info.name, classInfo.getFullName() + "::" + info.name);
-			} else {
-				methodText = methodText.replace(info.name, classInfo.name + "::" + info.name);
-			}
-
-			methodText = cpprefHelpers.removeIndent(methodText);
-
-			result += "\n" + methodText + " {\n}\n";
+			result = getFunctionMockImplementation(info, definitionWithNamespace);
 		}
 	});
 
@@ -152,6 +179,10 @@ function getInsertPosition(editor: vscode.TextEditor, namespace: string, definit
 	});
 }
 
+function getDefinitionWithNamespace(): boolean | undefined{
+	return vscode.workspace.getConfiguration("cppref").get<boolean>("definition_with_namespace");
+}
+
 async function writeVirtualMethodsImplementaion(classInfo: cpprefInfo.ClassInfo, uri:vscode.Uri) {
 	let methodInfos = getVirtualMethods(classInfo, classInfo.getFullName());
 
@@ -173,7 +204,7 @@ async function writeVirtualMethodsImplementaion(classInfo: cpprefInfo.ClassInfo,
 					return;
 				}
 
-				let definitionWithNamespace = vscode.workspace.getConfiguration("cppref").get<boolean>("definition_with_namespace");
+				let definitionWithNamespace = getDefinitionWithNamespace();
 
 				if (definitionWithNamespace === undefined) {
 					return;
@@ -181,7 +212,7 @@ async function writeVirtualMethodsImplementaion(classInfo: cpprefInfo.ClassInfo,
 
 				let insertPosition = await getInsertPosition(currentEditor, classInfo.namespace, definitionWithNamespace);
 
-				let text = getMethodsText(methodInfos, classInfo, definitionWithNamespace);
+				let text = getMethodsText(methodInfos, definitionWithNamespace);
 
 				currentEditor.edit(edit => {
 					edit.insert(insertPosition, text);
@@ -206,4 +237,78 @@ export function implementVirtualFunctions() {
 			});
 		});
 	}
+}
+
+export function implementFunction() {
+	let activeEditor = vscode.window.activeTextEditor;
+	
+		
+	if (!activeEditor) {
+		return;
+	}
+
+	let uri = activeEditor.document.uri;
+
+	cpprefInfo.getFunctionInfoCurrentPosition().then(info => {
+		vscode.commands.executeCommand<any>('C_Cpp.SwitchHeaderSource', uri).then (async _ => {
+			setTimeout(async _ => { // we need timeout to wait for switch, otherwise the document is not editable
+				let currentEditor = vscode.window.activeTextEditor;
+						
+				if (currentEditor)
+				{
+					let definitionWithNamespace = getDefinitionWithNamespace();
+	
+					if (definitionWithNamespace === undefined) {
+						return;
+					}
+	
+					let insertPosition = await getInsertPosition(currentEditor, info.namespace, definitionWithNamespace);
+	
+					let text = getFunctionMockImplementation(info, definitionWithNamespace);
+	
+					currentEditor.edit(edit => {
+						edit.insert(insertPosition, text);
+						vscode.window.showInformationMessage("Implemented " + info.getFullName());
+					});
+				}
+			}, headerSourceSwitchTimeout);
+		});
+	});
+}
+
+export async function moveToCpp() {
+    let activeEditor = vscode.window.activeTextEditor;
+	
+		
+	if (!activeEditor) {
+		return;
+	}
+
+	let uri = activeEditor.document.uri;
+
+	cpprefInfo.getFunctionInfoCurrentPosition().then(info => {
+		vscode.commands.executeCommand<any>('C_Cpp.SwitchHeaderSource', uri).then (async _ => {
+			setTimeout(async _ => { // we need timeout to wait for switch, otherwise the document is not editable
+				let currentEditor = vscode.window.activeTextEditor;
+						
+				if (currentEditor)
+				{
+					let definitionWithNamespace = getDefinitionWithNamespace();
+	
+					if (definitionWithNamespace === undefined) {
+						return;
+					}
+	
+					let insertPosition = await getInsertPosition(currentEditor, info.namespace, definitionWithNamespace);
+	
+					let text = getFunctionImplementation(info, definitionWithNamespace);
+	
+					currentEditor.edit(edit => {
+						edit.insert(insertPosition, text);
+						vscode.window.showInformationMessage("Implemented " + info.getFullName());
+					});
+				}
+			}, headerSourceSwitchTimeout);
+		});
+	}); 
 }

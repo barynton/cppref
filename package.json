@@ -11,7 +11,7 @@
 		"type": "git"
 	},
 	"description": "Cpp refactoring tool",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"engines": {
 		"vscode": "^1.39.0"
 	},
@@ -20,15 +20,17 @@
 	],
 	"activationEvents": [
 		"onCommand:extension.createFilePair",
-		"onCommand:extension.implementInterface",
-		"onCommand:extension.changeDeclaration"
+		"onCommand:extension.implementVirtualFunctions",
+		"onCommand:extension.changeDeclaration",
+		"onCommand:extension.implementFunction",
+		"onCommand:extension.moveToCpp"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"commands": [
 			{
-				"command": "extension.implementInterface",
-				"title": "Cppref: implement interface"
+				"command": "extension.implementVirtualFunctions",
+				"title": "Cppref: implement virtual functions"
 			},
 			{
 				"command": "extension.createFilePair",
@@ -37,12 +39,24 @@
 			{
 				"command": "extension.changeDeclaration",
 				"title": "Cppref: chnage declaration"
+			},
+			{
+				"command": "extension.implementFunction",
+				"title": "Cppref: implement function"
+			},
+			{
+				"command": "extension.moveToCpp",
+				"title": "Cppref: move to cpp"
 			}
 		],
 		"menus": {
 			"editor/context": [
 				{
-					"command": "extension.implementInterface",
+					"command": "extension.implementVirtualFunctions",
+					"when": "resourceLangId == cpp"
+				},
+				{
+					"command": "extension.changeDeclaration",
 					"when": "resourceLangId == cpp"
 				},
 				{
@@ -75,7 +89,7 @@
 	"devDependencies": {
 		"@types/node": "^12.11.6",
 		"@types/vscode": "^1.39.0",
-		"typescript": "^3.6.4",
+		"typescript": "^3.8.3",
 		"tslint": "^5.20.0"
 	},
 	"dependencies": {

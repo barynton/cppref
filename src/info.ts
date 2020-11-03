@@ -31,26 +31,45 @@ class SymbolInfo
 }
 export class FunctionInfo
 {
+	className: string = "";
 	name: string | undefined;
 	namespace: string = "";
     // variables: string | undefined;
     methodDescription: MethodDescriptionContainer | undefined;
 	text: string="";
+	implementation: string ="";
 
 	getFullName() : string {
         if(this.name !== undefined) {
+			let result = "";
+
 			if (this.namespace.length) {
-				return this.namespace + "::" + this.name;
+				result = this.namespace + "::";
 			}
-			else {
-				return this.name;
+
+			if (this.className.length) {
+				result = result + this.className + "::";
 			}
+			
+			result = result + this.name;
+
+			return result;
         }
         else
         {
             return "";
         }
-    }
+	}
+	
+	getLastNamespace() : string {
+		if (this.namespace.length) {
+			let namespaces = this.namespace.split("::");
+			return namespaces[namespaces.length-1];
+		}
+		else {
+			return "";
+		}
+	}
 }
 
 export class ClassInfo {
@@ -105,7 +124,7 @@ export function getFirstDefinitionLocation(location : vscode.Location) : Thenabl
 	});
 }
 
-export function getSymbolInformation(uri: vscode.Uri): Thenable<vscode.DocumentSymbol[] | undefined> {
+export function getDocumentSymbolInformation(uri: vscode.Uri): Thenable<vscode.DocumentSymbol[] | undefined> {
 	return vscode.commands.executeCommand<vscode.DocumentSymbol[]>('vscode.executeDocumentSymbolProvider', uri);
 }
 
@@ -216,7 +235,7 @@ function getFunctionHeader(document: vscode.TextDocument, symbolInfo: vscode.Doc
 	}
 
 	text += document.getText(new vscode.Range(start, symbolInfo.selectionRange.end));
-	text += getTextBehind(document, symbolInfo.selectionRange.end, /(\s*)(\([0-9A-Za-z&=()*.:,\s]*[^;{])/g);
+	text += getTextBehind(document, symbolInfo.selectionRange.end, /(\s*)(\([0-9A-Za-z&=()*.:,\s_<>]*[^;{])/g);
 	
 	return text;
 }
@@ -241,12 +260,110 @@ export function tideFunctionText(text: string): string {
 export function getFunctionInfo(document: vscode.TextDocument, info: vscode.DocumentSymbol, namespace: string): FunctionInfo {
 	let functionInfo = new FunctionInfo;
 	functionInfo.name = document.getText(info.selectionRange);
+
+
 	let text = getFunctionHeader(document, info);
+	let position = new vscode.Position(info.range.start.line, 0);
+
+	let offset = document.offsetAt(position) + text.length;
+	let lastSymbolPosition = document.positionAt(offset);
+	let scopeEndPosition = findScopeEnd(document, lastSymbolPosition);
+
+	if (scopeEndPosition !== undefined) {
+		functionInfo.implementation = document.getText(new vscode.Range(lastSymbolPosition, scopeEndPosition));
+	}
+
 	functionInfo.methodDescription = getFunctionDescription(text);
 	functionInfo.text = tideFunctionText(text);
-	functionInfo.namespace = namespace;
+	
+	if (info.kind === vscode.SymbolKind.Method) {
+		let names = namespace.split("::");
+		functionInfo.className = names[names.length - 1];
+
+		if (names.length > 1) {
+			functionInfo.namespace = namespace.slice(0, namespace.lastIndexOf("::"));
+		}
+		else {
+			functionInfo.namespace = "";
+		}
+	} else
+	{
+		functionInfo.namespace = namespace;
+	}
 
 	return functionInfo;
+}
+
+export function getFunctionInfoCurrentPosition(): Thenable<FunctionInfo> {
+	return new Promise<FunctionInfo>( async (resolve, _) => {
+		let activeEditor = vscode.window.activeTextEditor;
+		
+		if (!activeEditor) {
+			return;
+		}
+
+		let location = await getFirstDeclarationLocation(new vscode.Location(activeEditor.document.uri, activeEditor.selection.active));
+		
+		if (!location) {
+			return;
+		}
+
+		let uri = activeEditor.document.uri;
+
+		let infos = await getDocumentSymbolInformation(uri);
+
+		if (!infos) {
+			return;
+		}
+
+		let symbolInfo = getSymbolInfo(infos, location.range);
+
+		
+		if (!symbolInfo || !symbolInfo.documentSymbol) {
+			return;
+		}
+
+		let info = getFunctionInfo(activeEditor.document, symbolInfo.documentSymbol, symbolInfo.getNamespaceString());
+
+		resolve(info);
+	});
+}
+
+function getSymbol(document: vscode.TextDocument, offset: number) : string {
+	let result = document.getText(new vscode.Range(document.positionAt(offset), document.positionAt(offset+1)));
+
+	return result;
+}
+
+function findScopeEnd(document: vscode.TextDocument, position: vscode.Position): vscode.Position | undefined {
+	let currentOffset = document.offsetAt(position); 
+	let maxOffset = document.offsetAt(document.lineAt(document.lineCount-1).range.end);
+	
+
+	let c = getSymbol(document, currentOffset);
+
+	if (c !== "{") {
+		return undefined;
+	}
+
+	let opennedCount = 1;
+
+	while (currentOffset < maxOffset) {
+		++currentOffset;
+
+		let c = getSymbol(document, currentOffset);
+		if (c === "{") {
+			++opennedCount;
+		} else if (c === "}") {
+			--opennedCount;
+		}
+
+		if (opennedCount === 0) {
+			return document.positionAt(++currentOffset);	
+		}
+	}
+
+	return undefined;
 }
 
 function getMethodsInfo(document: vscode.TextDocument, namespace: string, infos: vscode.DocumentSymbol[]): FunctionInfo[] {
@@ -316,7 +433,7 @@ export function getClassInfo(location: vscode.Location): Thenable<ClassInfo> {
 		await vscode.workspace.openTextDocument(location.uri).then(async document => {
 			let className = document.getText(location.range);
 
-			await getSymbolInformation(location.uri).then(async infos => {
+			await getDocumentSymbolInformation(location.uri).then(async infos => {
 				if (infos === undefined) {
 					return;
 				}				

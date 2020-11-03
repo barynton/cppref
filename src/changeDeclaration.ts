@@ -17,14 +17,14 @@ async function replace(document: vscode.TextDocument, originalValue: string, rep
 
 function getFunctionInfo(document: vscode.TextDocument, location: vscode.Location): Thenable<cpprefInfo.FunctionInfo | undefined> {
 	return new Promise<cpprefInfo.FunctionInfo>(async (resolve, _) => {
-		let infos = await cpprefInfo.getSymbolInformation(document.uri);
+		let infos = await cpprefInfo.getDocumentSymbolInformation(document.uri);
 
 		if (!infos) {
 			resolve(undefined);
 			return;
 		}
 
-		let symbolInfo = await cpprefInfo.getSymbolInfo(infos, location.range);
+		let symbolInfo = cpprefInfo.getSymbolInfo(infos, location.range);
 		
 		if (!symbolInfo || !symbolInfo.documentSymbol) {
 			resolve(undefined);

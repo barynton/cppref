@@ -12,7 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with registerCommand
 	// The commandId parameter must match the command field in package.json
-	context.subscriptions.push(vscode.commands.registerCommand('extension.implementInterface', () => {
+	context.subscriptions.push(vscode.commands.registerCommand('extension.implementVirtualFunctions', () => {
 		cppref.implementVirtualFunctions();
 	}));
 
@@ -22,6 +22,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.changeDeclaration', () => {
 		cppref.changeDeclaration();
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('extension.implementFunction', () => {
+		cppref.implementFunction();
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('extension.moveToCpp', () => {
+		cppref.moveToCpp();
 	}));
 
 	// vscode.languages.registerHoverProvider(

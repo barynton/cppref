@@ -1,0 +1,7 @@
+curl -sL https://deb.nodesource.com/setup_10.x | sudo -E bash -
+sudo apt install nodejs
+
+sudo npm install typescript -g
+
+run npm install task
+run npm build task
